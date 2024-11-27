@@ -29,3 +29,5 @@ if __name__ == "__main__":
     for department in departments_data:
         print("Department scores:", department["scores"])
     print("Final Company Threat Score:", company_threat_score)
+
+    
