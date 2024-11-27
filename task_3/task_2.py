@@ -5,7 +5,6 @@ import pandas as pd
 from elasticsearch import Elasticsearch
 from gen_random import generate_random_data
 
-
 def get_es_client():
     es_host = os.getenv('ES_HOST', 'https://localhost:9200')  
     es = Elasticsearch(
@@ -29,23 +28,37 @@ def wait_for_es(es_client, retries=10, delay=5):
     return False
 
 def calculate_department_threat(department_scores):
-    return max(department_scores)
+    valid_scores = [score for score in department_scores if score is not None]
+    
+    if not valid_scores:
+        return 0
+
+    return max(valid_scores)
 
 def calculate_company_threat(departments):
-    max_department_threat = max(calculate_department_threat(department["scores"]) for department in departments)
-    avg_threat = np.mean([calculate_department_threat(department["scores"]) for department in departments])
-    
-    weight_max = np.random.uniform(0.6, 0.8)  
-    weight_avg = 1 - weight_max              
+    valid_departments = [department for department in departments if department.get("scores")]
 
+    if not valid_departments:
+        print("No data")
+
+    max_department_threat = max(calculate_department_threat(department["scores"]) for department in valid_departments)
+    
+    avg_threat = np.mean([calculate_department_threat(department["scores"]) for department in valid_departments])
+    weight_max = np.random.uniform(0.6, 0.8)
+    weight_avg = 1 - weight_max
     company_threat_score = weight_max * max_department_threat + weight_avg * avg_threat
-    return min(max(company_threat_score, 0), 90)  
+
+    return min(max(company_threat_score, 0), 90)
 
 def index_data_to_es(departments_data):
     es = get_es_client()
     for i, department in enumerate(departments_data):
+        scores = department["scores"]
+
+        scores = [None if np.isnan(x) else x for x in scores]
+
         doc = {
-            'scores': department["scores"].tolist()
+            'scores': scores
         }
         es.index(index="department_scores", id=i+1, document=doc)
 
@@ -63,6 +76,7 @@ def save_data_to_csv():
         {"scores": generate_random_data(30, 10, 30)},
     ]
     df = pd.DataFrame([dep["scores"] for dep in departments_data])
+    print(df)  
     df.to_csv('data.csv', index=False)
 
 if __name__ == "__main__":
@@ -85,3 +99,4 @@ if __name__ == "__main__":
     for department in departments_data_from_es:
         print("Department scores:", department["scores"])
     print("Final Company Threat Score:", company_threat_score)
+
